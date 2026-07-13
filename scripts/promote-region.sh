@@ -93,6 +93,10 @@ else
   warn "After:  $ZEEBE_AGES_AFTER"
 fi
 
+info "Keeping Zeebe's own basic-auth users ('$AUTH_USER', 'connectors') in sync with the values files..."
+ensure_orchestration_user_password "$CTX" "$NS" "$AUTH_USER" "$AUTH_PASS" "Test User" "${AUTH_USER}@example.com"
+ensure_orchestration_user_password "$CTX" "$NS" "connectors" "$CONNECTORS_PASS" "Connector User" "connector@example.com"
+
 # --- Everything below is Identity/Keycloak login provisioning - not
 # expressible as Helm values at all (direct Keycloak admin REST API calls),
 # so it stays exactly as-is: manual-style curl steps, per project convention. ---

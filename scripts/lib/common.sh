@@ -17,6 +17,7 @@ NS_WEST="${NS_WEST:-camunda-dr-west-ns}"
 
 AUTH_USER="${AUTH_USER:-your-basic-auth-username}"
 AUTH_PASS="${AUTH_PASS:-your-basic-auth-password}"
+CONNECTORS_PASS="${CONNECTORS_PASS:-your-connectors-password}"
 PROCESS_ID=dr-test-process
 BPMN_FILE="$SCRIPTS_DIR/assets/test-process.bpmn"
 JOB_TYPE=dr-test-job
@@ -535,6 +536,36 @@ ensure_shared_keycloak_db_secret() {
       ok "'$key' generated fresh and set identically in both regions (shared Keycloak Postgres)."
     fi
   done
+}
+
+# ensure_orchestration_user_password CTX NS USERNAME PASSWORD NAME EMAIL
+# The Zeebe-native basic-auth user store (orchestration.security.
+# initialization.users, which "venom" and "connectors" both live in) is only
+# ever seeded when a broker's storage is first bootstrapped - a later `helm
+# upgrade` re-renders the ConfigMap these values come from, but does not
+# retroactively touch users that already exist. Left alone, this lets a
+# user's real password silently drift out of sync with the values files
+# whenever AUTH_PASS/CONNECTORS_PASS changes without a full Zeebe
+# re-bootstrap (see reset-cluster.sh). This calls the Orchestration Cluster
+# REST API's user-update endpoint to force it back into sync instead,
+# mirroring how ensure_shared_keycloak_db_secret/the venom reset-password
+# call above keep Identity/Keycloak in sync. It authenticates as AUTH_USER,
+# so it can only succeed if that credential itself is currently valid - if
+# AUTH_USER's own password has already drifted, this fails harmlessly (a
+# full Zeebe re-bootstrap is the only way to recover from that case).
+ensure_orchestration_user_password() {
+  local ctx="$1" ns="$2" username="$3" password="$4" name="$5" email="$6" pf_pid status
+  pf_pid=$(pf_start "$ctx" "$ns" pod/camunda-zeebe-0 18095 8080)
+  show_cmd "curl -s -o /dev/null -w '%{http_code}' -X PUT http://localhost:18095/v2/users/$username -u $AUTH_USER:*** -d '{\"name\":\"$name\",\"email\":\"$email\",\"password\":\"***\"}'"
+  status=$(curl -s -o /dev/null -w '%{http_code}' -X PUT "http://localhost:18095/v2/users/${username}" \
+    -u "$AUTH_USER:$AUTH_PASS" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"${name}\",\"email\":\"${email}\",\"password\":\"${password}\"}")
+  pf_stop "$pf_pid"
+  if [ "$status" = "200" ]; then
+    ok "'$username' basic-auth password confirmed in sync."
+  else
+    warn "Could not update '$username's basic-auth password (HTTP $status) - '$AUTH_USER' may not currently authenticate against Zeebe's basic-auth store, or lacks permission. A full Zeebe re-bootstrap (./scripts/reset-cluster.sh) is required to recover from basic-auth drift."
+  fi
 }
 
 # enable_exporter_init CONTEXT NS POD LPORT EXPORTER_ID INIT_FROM_EXPORTER_ID

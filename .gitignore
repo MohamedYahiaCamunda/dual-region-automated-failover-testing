@@ -1,3 +1,5 @@
 scripts/.state/
 *.log
 .DS_Store
+.env
+helm-overlays/orchestration-users.local.yaml

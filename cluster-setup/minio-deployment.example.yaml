@@ -1,0 +1,76 @@
+# Reference manifest for a single-instance MinIO deployment in one region,
+# used as an S3-compatible Elasticsearch snapshot target. Apply once per
+# region, with the namespace and credentials below adjusted each time -
+# see CLUSTER_SETUP.md section 2 for the bucket-creation and replication
+# steps that follow.
+#
+# This is a single Deployment + PVC, not MinIO's distributed mode - adequate
+# for a test environment, reconsider for anything carrying real load.
+#
+# Usage:
+#   oc --context <context> apply -f cluster-setup/minio-deployment.example.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-data
+  namespace: <namespace>
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: <namespace>
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: quay.io/minio/minio:latest
+          args: ["server", "/data", "--console-address", ":9001"]
+          env:
+            # These become the bucket's access/secret key pair. Elasticsearch's
+            # own S3 client credentials (in the elasticsearch-env-secret Secret)
+            # must match whatever is set here - see CLUSTER_SETUP.md.
+            - name: MINIO_ROOT_USER
+              value: "REPLACE_WITH_YOUR_OWN_ACCESS_KEY"
+            - name: MINIO_ROOT_PASSWORD
+              value: "REPLACE_WITH_YOUR_OWN_SECRET_KEY"
+          ports:
+            - containerPort: 9000
+            - containerPort: 9001
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: minio-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: <namespace>
+spec:
+  selector:
+    app: minio
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9001
+      targetPort: 9001

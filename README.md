@@ -34,6 +34,7 @@ This suite expects an already-running dual-region Camunda 8 environment with the
 
 ```
 scripts/
+  quick-setup.sh               Interactive first-time setup (see Installation below)
   test/                        Step 00-08: the test scenario itself
   promote-region.sh            Promotes a region to active (toggles Connectors only)
   demote-region.sh             Demotes a region to passive (toggles Connectors only)
@@ -46,18 +47,38 @@ scripts/
 
 helm-overlays/
   test/                        Per-region Helm values and active/passive overlays
-  orchestration-users.yaml     Zeebe/Operate/Tasklist basic-auth users (shared, non-secret)
+  orchestration-users.yaml     Zeebe/Operate/Tasklist basic-auth users (template, non-secret)
+
+cluster-setup/                 Reference Kubernetes manifests used by CLUSTER_SETUP.md
+                                (MinIO deployment, cross-cluster ServiceExports)
 ```
 
 ## Prerequisites
 
-Before running anything:
+- **Two Kubernetes/OpenShift clusters**, one per region, with `oc`/`kubectl` access configured for each, and a dual-region Camunda 8 environment already deployed (or ready to be — see [Installation](#installation) below).
+- **Command-line tools**: `oc` or `kubectl`, `helm`, `curl`, `python3` (used only for JSON parsing/table formatting, no third-party packages required), and `openssl` (used by `quick-setup.sh` to generate credentials).
 
-1. **Cluster access** — `oc` (or `kubectl`) configured with a context for each region. Update the context names and namespaces at the top of `scripts/lib/common.sh` (`CONTEXT_EAST`, `NS_EAST`, `CONTEXT_WEST`, `NS_WEST`) to match your environment.
-2. **Camunda already deployed** in both regions using `helm-overlays/test/{east,west}-values.yaml` plus the matching `active-overlay.yaml`/`passive-overlay.yaml`, with all real credentials supplied via the `camunda-credentials` Kubernetes Secret referenced throughout those values files — nothing in this repository contains literal secret values. See [CLUSTER_SETUP.md](CLUSTER_SETUP.md) for a full walkthrough of setting this up from scratch, including cross-cluster connectivity, MinIO replication, and the standalone Keycloak Postgres.
-3. **A basic-auth test user** provisioned in Zeebe/Operate/Tasklist (username/password configured via `AUTH_USER`/`AUTH_PASS` in `scripts/lib/common.sh`).
-4. **MinIO buckets already created** in both regions with bucket replication configured between them (see [CLUSTER_SETUP.md](CLUSTER_SETUP.md#2-object-storage-minio-per-region-with-bucket-replication)). Elasticsearch's own snapshot repository registration is handled by the scripts, but bucket creation itself is an Elasticsearch/object-storage-level action outside this project's scope.
-5. **Command-line tools**: `oc` or `kubectl`, `helm`, `curl`, `python3` (used only for JSON parsing/table formatting, no third-party packages required).
+## Installation
+
+1. **Clone this repository** and run the interactive setup helper from its root:
+
+   ```bash
+   ./scripts/quick-setup.sh
+   ```
+
+   This prompts for your cluster contexts, namespaces, and test credentials, and writes them to a local `.env` file plus a local Helm values file — both excluded from version control, so nothing you enter here ever needs to be committed. See [Configuration](#configuration) for exactly what it writes.
+
+2. **Load the generated environment** in every terminal you use for setup or testing:
+
+   ```bash
+   source .env
+   ```
+
+3. **Deploy Camunda 8 in both regions**, if you haven't already. [CLUSTER_SETUP.md](CLUSTER_SETUP.md) walks through this end to end — cross-cluster connectivity, MinIO with bucket replication, the standalone Keycloak Postgres, and the Helm install itself — using the reference manifests under [`cluster-setup/`](cluster-setup/) and the values in `helm-overlays/`.
+
+4. **Verify both regions are healthy** (the last step of CLUSTER_SETUP.md covers this), then continue with [Quick start](#quick-start) below.
+
+If Camunda is already deployed and you only need this suite's test scripts pointed at it, steps 1-2 are all you need — skip straight to [Quick start](#quick-start) once `.env` is sourced.
 
 ## Quick start
 
@@ -102,10 +123,16 @@ These can be run at any time, independent of the step sequence above, to inspect
 
 ## Configuration
 
+Run `./scripts/quick-setup.sh` once (see [Installation](#installation)) rather
+than editing any of the files below by hand — it collects the same values
+interactively and writes them out for you. This section documents what it
+writes and where those values come from, in case you need to adjust
+something afterwards.
+
 All environment-specific values live in two places:
 
-- **`scripts/lib/common.sh`** — cluster contexts, namespaces, test-user credentials, and the BPMN process file used to generate data. Every other script sources this file.
-- **`helm-overlays/test/*.yaml`** — the Helm values and overlays applied by `promote-region.sh`/`demote-region.sh`. Every credential referenced here is a Kubernetes Secret key reference (`secretKeyRef`), never a literal value, with one documented exception: `orchestration.security.initialization.users[].password` is rendered as plaintext into a ConfigMap by the Camunda Helm chart regardless of how it's supplied — a chart limitation, not a choice made by this project — which is why `helm-overlays/orchestration-users.yaml` is checked in as a plain values file rather than a secret reference.
+- **Cluster contexts, namespaces, and credentials** — read by `scripts/lib/common.sh` (sourced by every other script) as environment variables: `CONTEXT_EAST`, `NS_EAST`, `CONTEXT_WEST`, `NS_WEST`, `AUTH_USER`, `AUTH_PASS`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `USERS_VALUES`. `quick-setup.sh` writes these to a local `.env` file (excluded from version control) — source it before running any script: `source .env`. Without it, each variable falls back to a placeholder default defined in `common.sh`.
+- **`helm-overlays/test/*.yaml`** — the Helm values and overlays applied by `promote-region.sh`/`demote-region.sh`. Every credential referenced here is a Kubernetes Secret key reference (`secretKeyRef`), never a literal value, with one documented exception: `orchestration.security.initialization.users[].password` is rendered as plaintext into a ConfigMap by the Camunda Helm chart regardless of how it's supplied — a chart limitation, not a choice made by this project. `helm-overlays/orchestration-users.yaml` is therefore checked in as a placeholder values file rather than a secret reference; `quick-setup.sh` writes a populated copy to `helm-overlays/orchestration-users.local.yaml` (also excluded from version control) and points `USERS_VALUES` at it, so the placeholder file itself is never modified.
 
 ## Design notes
 

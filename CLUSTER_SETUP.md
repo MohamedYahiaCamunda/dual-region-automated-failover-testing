@@ -18,6 +18,28 @@
 This assumes two separate Kubernetes/OpenShift clusters already exist — one
 per region — with `oc`/`kubectl` access configured for each.
 
+## 0. Generate your environment-specific values
+
+Before following the steps below, run the interactive setup helper once:
+
+```bash
+./scripts/quick-setup.sh
+```
+
+It collects your cluster contexts, namespaces, and test credentials, and
+writes them to a local `.env` file plus a local Helm values file — both
+excluded from version control (see the main [README](README.md#configuration)).
+Source that file in every terminal you use for the rest of this guide and
+for running the test suite:
+
+```bash
+source .env
+```
+
+The reference manifests linked below use `<namespace>`-style placeholders —
+substitute your own region namespaces (`$NS_EAST` / `$NS_WEST` once `.env`
+is sourced) wherever you see one.
+
 ## 1. Cross-cluster connectivity
 
 Both regions' Zeebe brokers need to reach each other directly (for Raft
@@ -55,7 +77,16 @@ against a single-instance MinIO deployment per region (a `Deployment` +
 `PersistentVolumeClaim` + `Service`, not MinIO's distributed mode - fine for
 a test environment, reconsider for anything larger).
 
-For each region:
+A reference manifest is provided at
+[`cluster-setup/minio-deployment.example.yaml`](cluster-setup/minio-deployment.example.yaml) —
+copy it, fill in the namespace and access/secret key placeholders, and apply
+it once per region:
+
+```bash
+oc --context <context> apply -f cluster-setup/minio-deployment.example.yaml
+```
+
+Then, for each region:
 
 ```bash
 # Create the bucket
@@ -116,19 +147,11 @@ older free-tier image tags to that registry; adjust if using a different
 registry or a paid Bitnami/Tanzu subscription.)
 
 Export its Service so the other region can reach it over the
-`clusterset.local` DNS domain from step 1:
-
-```yaml
-# keycloak-postgres-serviceexport.yaml
-apiVersion: multicluster.x-k8s.io/v1alpha1
-kind: ServiceExport
-metadata:
-  name: keycloak-postgres
-  namespace: <east-namespace>
-```
+`clusterset.local` DNS domain from step 1, using the reference manifest at
+[`cluster-setup/keycloak-postgres-serviceexport.example.yaml`](cluster-setup/keycloak-postgres-serviceexport.example.yaml):
 
 ```bash
-oc --context <east-context> apply -f keycloak-postgres-serviceexport.yaml
+oc --context <context-hosting-postgres> apply -f cluster-setup/keycloak-postgres-serviceexport.example.yaml
 ```
 
 `helm-overlays/test/{east,west}-values.yaml` both point their
@@ -176,12 +199,13 @@ With the above in place, install Camunda in each region using this
 repository's values files. East starts active, West starts passive:
 
 ```bash
-# East (active)
+# East (active) - $USERS_VALUES comes from .env (step 0); it falls back to
+# the checked-in placeholder file if you haven't sourced .env yet.
 helm --kube-context <east-context> -n <east-namespace> install camunda camunda/camunda-platform \
   --version 13.11.1 \
   -f helm-overlays/test/east-values.yaml \
   -f helm-overlays/test/active-overlay.yaml \
-  -f helm-overlays/orchestration-users.yaml \
+  -f "${USERS_VALUES:-helm-overlays/orchestration-users.yaml}" \
   --timeout 10m
 
 # West (passive)
@@ -189,7 +213,7 @@ helm --kube-context <west-context> -n <west-namespace> install camunda camunda/c
   --version 13.11.1 \
   -f helm-overlays/test/west-values.yaml \
   -f helm-overlays/test/passive-overlay.yaml \
-  -f helm-overlays/orchestration-users.yaml \
+  -f "${USERS_VALUES:-helm-overlays/orchestration-users.yaml}" \
   --timeout 10m
 ```
 
@@ -206,7 +230,23 @@ active and passive should go through `promote-region.sh` /
 install` — those scripts handle the Secret population from step 4 and the
 Keycloak realm/user provisioning that a bare Helm install doesn't cover.
 
-## 6. Verify
+## 6. Export the remaining services for cross-cluster reachability
+
+With Camunda and MinIO now running in both regions, export the Services
+each region's Zeebe brokers, Elasticsearch, Connectors, and MinIO need to
+reach across the cluster boundary, using
+[`cluster-setup/serviceexports.example.yaml`](cluster-setup/serviceexports.example.yaml).
+Apply the same list in **both** regions:
+
+```bash
+oc --context <east-context> -n <east-namespace> apply -f cluster-setup/serviceexports.example.yaml
+oc --context <west-context> -n <west-namespace> apply -f cluster-setup/serviceexports.example.yaml
+```
+
+(The standalone Keycloak Postgres from step 3 is exported separately, since
+it only needs exporting from whichever single region hosts it.)
+
+## 7. Verify
 
 ```bash
 oc --context <east-context> -n <east-namespace> get pods

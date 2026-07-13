@@ -1,0 +1,11 @@
+# Reference manifest exporting the standalone Keycloak Postgres Service (see
+# CLUSTER_SETUP.md section 3) so the region that does NOT host it can still
+# reach it over the cross-cluster DNS domain. Apply this once, only in the
+# region hosting that Postgres release.
+#
+#   oc --context <context-hosting-postgres> apply -f cluster-setup/keycloak-postgres-serviceexport.example.yaml
+apiVersion: multicluster.x-k8s.io/v1alpha1
+kind: ServiceExport
+metadata:
+  name: keycloak-postgres
+  namespace: <namespace-hosting-postgres>

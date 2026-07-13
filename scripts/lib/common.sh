@@ -476,7 +476,7 @@ toggle_operate_tasklist() {
     -f "$main_values" \
     -f "$SCRIPTS_DIR/../helm-overlays/active-overlay.yaml" \
     -f "$toggle_overlay" \
-    -f "$SCRIPTS_DIR/../helm-overlays/orchestration-users.yaml" \
+    -f "${USERS_VALUES:-$SCRIPTS_DIR/../helm-overlays/orchestration-users.yaml}" \
     --timeout 5m > /dev/null
 }
 

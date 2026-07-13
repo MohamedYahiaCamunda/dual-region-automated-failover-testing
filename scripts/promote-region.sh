@@ -28,7 +28,7 @@ else
 fi
 MAIN_VALUES="$SCRIPTS_DIR/../helm-overlays/test/${REGION}-values.yaml"
 OVERLAY_VALUES="$SCRIPTS_DIR/../helm-overlays/test/active-overlay.yaml"
-USERS_VALUES="$SCRIPTS_DIR/../helm-overlays/orchestration-users.yaml"
+USERS_VALUES="${USERS_VALUES:-$SCRIPTS_DIR/../helm-overlays/orchestration-users.yaml}"
 
 header "PROMOTE $REGION TO ACTIVE (Connectors only - Zeebe/Operate/Tasklist/Identity/Keycloak/Optimize untouched)"
 

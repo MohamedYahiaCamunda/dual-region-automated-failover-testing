@@ -20,7 +20,7 @@ else
 fi
 MAIN_VALUES="$SCRIPTS_DIR/../helm-overlays/test/${REGION}-values.yaml"
 OVERLAY_VALUES="$SCRIPTS_DIR/../helm-overlays/test/passive-overlay.yaml"
-USERS_VALUES="$SCRIPTS_DIR/../helm-overlays/orchestration-users.yaml"
+USERS_VALUES="${USERS_VALUES:-$SCRIPTS_DIR/../helm-overlays/orchestration-users.yaml}"
 
 header "DEMOTE $REGION TO PASSIVE (Connectors only - Zeebe/Operate/Tasklist/Identity/Keycloak/Optimize untouched)"
 

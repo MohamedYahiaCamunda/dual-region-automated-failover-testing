@@ -1,0 +1,21 @@
+# Basic-auth users for Zeebe, Operate, and Tasklist. Identical across both
+# regions; referenced directly by the promote/demote scripts. This field
+# (orchestration.security.initialization.users[].password) is rendered as
+# plaintext into a ConfigMap by the Camunda Helm chart with no secretKeyRef
+# option - a chart limitation, not a choice made by this project - which is
+# why it's a plain checked-in values file rather than a secret reference.
+#
+# Replace both passwords below with your own before deploying. The username
+# "venom" must match AUTH_USER/AUTH_PASS in scripts/lib/common.sh.
+orchestration:
+  security:
+    initialization:
+      users:
+      - username: connectors
+        password: REPLACE_WITH_YOUR_OWN_PASSWORD
+        name: Connector User
+        email: connector@demo.com
+      - username: venom
+        password: REPLACE_WITH_YOUR_OWN_PASSWORD
+        name: CI Admin User
+        email: venom@ci.local

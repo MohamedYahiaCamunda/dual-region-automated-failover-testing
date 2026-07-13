@@ -1,0 +1,10 @@
+# Test D active overlay. Does not include orchestration.profiles, in
+# contrast to the shared helm-overlays/active-overlay.yaml: Operate/Tasklist
+# are permanently on in test-d/east-values.yaml and test-d/west-values.yaml
+# instead, the same as Identity/Keycloak/Optimize (active-active in both
+# regions - see the comments in test-d/east-values.yaml). Connectors is the
+# only component that is genuinely active-passive, and the only thing this
+# overlay touches; none of that affects the orchestration StatefulSet Zeebe
+# lives in.
+connectors:
+  replicas: 1

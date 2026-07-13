@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# Test D - Step 6: Failback (combined - the full recovery procedure)
+# Step 6: Failback (combined - the full recovery procedure)
 #
-# Follows the same documented phase order as Test C's 06-failback.sh: recreate
-# Elasticsearch, then Zeebe, then pause/snapshot/restore/initialize-exporter/
-# resume, then re-add brokers last. See that script's header for the three
-# underlying constraints this order depends on (the ES-before-Zeebe startup
-# dependency, force-removed brokers needing fresh storage to rejoin, and add
-# requiring no force flag plus an explicit replication factor).
+# Follows a fixed phase order: recreate Elasticsearch, then Zeebe, then
+# pause/snapshot/restore/initialize-exporter/resume, then re-add brokers
+# last. Three constraints drive this order: Elasticsearch must exist before
+# Zeebe starts (an Operate/Tasklist startup dependency), force-removed
+# brokers need fresh storage to safely rejoin, and re-adding brokers requires
+# no force flag plus an explicit replication factor.
 #
-# The one deliberate difference, and the reason this scenario exists: this
-# script never calls toggle_operate_tasklist. Test C's 06-failback.sh
-# deactivates Operate/Tasklist on the surviving region before the
-# backup/restore window (documented procedure step 2) and re-enables them
-# afterward (step 8), but doing so via Helm changes the same "orchestration"
-# StatefulSet Zeebe lives in, forcing a full rolling restart of every broker
-# in the surviving region, twice, in the middle of an already-delicate
-# recovery window. Test D instead accepts the tradeoff of Operate/Tasklist
+# This script deliberately never toggles Operate/Tasklist off during the
+# backup/restore window. The official dual-region procedure deactivates
+# Operate/Tasklist on the surviving region before the backup/restore window
+# and re-enables them afterward, since some chart versions consolidate them
+# into the same "orchestration" StatefulSet Zeebe lives in - toggling them
+# via Helm would force a full rolling restart of every broker in the
+# surviving region, twice, in the middle of an already-delicate recovery
+# window. This suite instead accepts the tradeoff of Operate/Tasklist
 # remaining reachable during the brief pause/snapshot window, rather than
 # being gated off, in exchange for Zeebe never being touched by anything
 # other than the raw actuator API calls (force-remove/add) for the entire
@@ -25,18 +25,18 @@
 set -euo pipefail
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 
-STATE=$(state_file "test-d")
+STATE=$(state_file "test")
 state_load "$STATE"
-require_state TESTD_BASELINE_COMPLETED_KEYS "./00-baseline.sh"
-require_state TESTD_BASELINE_ACTIVE_KEYS "./00-baseline.sh"
-require_state TESTD_DURING_COMPLETED_KEYS "./05-create-data-during-outage.sh"
-require_state TESTD_DURING_ACTIVE_KEYS "./05-create-data-during-outage.sh"
+require_state TEST_BASELINE_COMPLETED_KEYS "./00-baseline.sh"
+require_state TEST_BASELINE_ACTIVE_KEYS "./00-baseline.sh"
+require_state TEST_DURING_COMPLETED_KEYS "./05-create-data-during-outage.sh"
+require_state TEST_DURING_ACTIVE_KEYS "./05-create-data-during-outage.sh"
 
-header "TEST D - STEP 6: Failback (combined recovery, documented order, zero Zeebe restarts)"
+header "STEP 6: Failback (combined recovery, documented order, zero Zeebe restarts)"
 
 # --- 1/6: Safety check ---
 header "1/6: Safety check"
-ALL_KEYS="$TESTD_BASELINE_COMPLETED_KEYS $TESTD_BASELINE_ACTIVE_KEYS $TESTD_DURING_COMPLETED_KEYS $TESTD_DURING_ACTIVE_KEYS"
+ALL_KEYS="$TEST_BASELINE_COMPLETED_KEYS $TEST_BASELINE_ACTIVE_KEYS $TEST_DURING_COMPLETED_KEYS $TEST_DURING_ACTIVE_KEYS"
 CSV=$(join_csv "$ALL_KEYS")
 COUNT=$(echo "$ALL_KEYS" | wc -w | tr -d ' ')
 info "Confirming all $COUNT test instances are durably in west's Elasticsearch before touching any storage..."
@@ -50,7 +50,7 @@ if [ "$WEST_COUNT" -ne "$COUNT" ]; then
 fi
 ok "Safe to proceed."
 
-confirm_destructive "This wipes east's Elasticsearch AND Zeebe PVCs only (east was fully lost - its storage is stale/unusable either way) and rebuilds it as a fresh replica of west. West's PVCs and live Zeebe state are NEVER touched at any point, and unlike Test C, west's Zeebe brokers are never even restarted."
+confirm_destructive "This wipes east's Elasticsearch AND Zeebe PVCs only (east was fully lost - its storage is stale/unusable either way) and rebuilds it as a fresh replica of west. West's PVCs and live Zeebe state are NEVER touched at any point - west's Zeebe brokers are never even restarted."
 
 # --- 2/6: Recreate east's Elasticsearch (before Zeebe - Operate startup dependency) ---
 header "2/6: Recreate east's Elasticsearch"
@@ -374,9 +374,9 @@ fi
 ok "Both regions fully healthy at the Zeebe/ES level."
 
 echo
-header "Promoting east back to active, then demoting west (in that order - no gap with nothing active) - Test D variant, zero Zeebe restarts"
-"$SCRIPTS_DIR/promote-region-d.sh" east
-"$SCRIPTS_DIR/demote-region-d.sh" west
+header "Promoting east back to active, then demoting west (in that order - no gap with nothing active) - zero Zeebe restarts"
+"$SCRIPTS_DIR/promote-region.sh" east
+"$SCRIPTS_DIR/demote-region.sh" west
 
 ok "Failback complete."
 

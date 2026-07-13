@@ -129,7 +129,7 @@ metadata:
 oc --context <east-context> apply -f keycloak-postgres-serviceexport.yaml
 ```
 
-`helm-overlays/test-d/{east,west}-values.yaml` both point their
+`helm-overlays/test/{east,west}-values.yaml` both point their
 `identityKeycloak.externalDatabase.host` at this instance via its
 `clusterset.local` hostname — update that value if you install it under a
 different namespace/release name.
@@ -154,7 +154,7 @@ Create an empty Secret in each region first:
 oc --context <context> -n <namespace> create secret generic camunda-credentials
 ```
 
-`promote-region-d.sh` / `demote-region-d.sh` automatically generate and
+`promote-region.sh` / `demote-region.sh` automatically generate and
 populate any missing per-region keys (Identity/WebModeler database
 passwords, migration client secret, etc.) into this Secret the first time
 each region is promoted — you do not need to pre-populate those yourself.
@@ -177,16 +177,16 @@ repository's values files. East starts active, West starts passive:
 # East (active)
 helm --kube-context <east-context> -n <east-namespace> install camunda camunda/camunda-platform \
   --version 13.11.1 \
-  -f helm-overlays/test-d/east-values.yaml \
-  -f helm-overlays/test-d/active-overlay.yaml \
+  -f helm-overlays/test/east-values.yaml \
+  -f helm-overlays/test/active-overlay.yaml \
   -f helm-overlays/orchestration-users.yaml \
   --timeout 10m
 
 # West (passive)
 helm --kube-context <west-context> -n <west-namespace> install camunda camunda/camunda-platform \
   --version 13.11.1 \
-  -f helm-overlays/test-d/west-values.yaml \
-  -f helm-overlays/test-d/passive-overlay.yaml \
+  -f helm-overlays/test/west-values.yaml \
+  -f helm-overlays/test/passive-overlay.yaml \
   -f helm-overlays/orchestration-users.yaml \
   --timeout 10m
 ```
@@ -199,8 +199,8 @@ occurrence of the example namespace names to match your own before
 installing.
 
 After the initial install, all subsequent promotions/demotions between
-active and passive should go through `promote-region-d.sh` /
-`demote-region-d.sh` (or the equivalent step scripts), not raw `helm
+active and passive should go through `promote-region.sh` /
+`demote-region.sh` (or the equivalent step scripts), not raw `helm
 install` — those scripts handle the Secret population from step 4 and the
 Keycloak realm/user provisioning that a bare Helm install doesn't cover.
 
@@ -216,5 +216,5 @@ You should see all 8 Zeebe broker pods (4 per region) `Running`, partition
 leadership split across both regions, East showing Identity/Keycloak/
 Optimize/Connectors, and West showing Identity/Keycloak/Optimize only
 (Connectors scaled to 0). Once this is healthy, you're ready to run
-`./scripts/reset-cluster-d.sh` and start the test scenario from the main
+`./scripts/reset-cluster.sh` and start the test scenario from the main
 [README](README.md#quick-start).

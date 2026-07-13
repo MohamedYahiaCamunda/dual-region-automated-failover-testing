@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Test D - Step 5: Create new data during the outage
+# Step 5: Create new data during the outage
 # camundaregion1 (west) was never disabled; only camundaregion0 (east) was
 # disabled, in step 03. This data, created via west's gateway since east is
 # fully down, is expected to reach west's Elasticsearch normally and
@@ -13,7 +13,7 @@
 # this same outage window, as a concrete architecture check rather than a
 # process-data check. Identity/Keycloak are active-active, with both regions
 # pointed at the single, always-on "keycloak-postgres" instance (see the
-# identityKeycloak comment in helm-overlays/test-d/east-values.yaml). Creating the
+# identityKeycloak comment in helm-overlays/test/east-values.yaml). Creating the
 # user/role via west and confirming visibility via east after failback
 # (08-verify-final.sh) demonstrates that both regions' Keycloak genuinely
 # share one realm/database, rather than two independent instances that
@@ -21,10 +21,10 @@
 set -euo pipefail
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 
-STATE=$(state_file "test-d")
+STATE=$(state_file "test")
 state_load "$STATE"
 
-header "TEST D - STEP 5: Create data during the outage"
+header "STEP 5: Create data during the outage"
 
 info "Creating 2 COMPLETED instances via west (batch=during-outage-testD)..."
 COMPLETED_KEYS=""
@@ -34,12 +34,12 @@ for i in 1 2; do
   echo "  completed instance $i: $KEY"
 done
 COMPLETED_KEYS=$(echo "$COMPLETED_KEYS" | xargs)
-state_set "$STATE" "TESTD_DURING_COMPLETED_KEYS" "$COMPLETED_KEYS"
+state_set "$STATE" "TEST_DURING_COMPLETED_KEYS" "$COMPLETED_KEYS"
 
 info "Creating 1 ACTIVE (uncompleted/in-flight) instance via west (batch=during-outage-testD)..."
 KEY=$(create_instance "$CONTEXT_WEST" "$NS_WEST" "during-outage-testD" 3)
 echo "  active (left running) instance 3: $KEY"
-state_set "$STATE" "TESTD_DURING_ACTIVE_KEYS" "$KEY"
+state_set "$STATE" "TEST_DURING_ACTIVE_KEYS" "$KEY"
 
 sleep 5
 ALL_KEYS="$COMPLETED_KEYS $KEY"
@@ -62,10 +62,10 @@ fi
 
 echo
 info "Creating a Keycloak user + role via WEST's Identity/Keycloak (architecture check: proves both regions share one realm/database, not just process data)..."
-TESTD_IDENTITY_USER="dr-failover-test-user"
-TESTD_IDENTITY_ROLE="dr-failover-test-role"
-state_set "$STATE" "TESTD_IDENTITY_USER" "$TESTD_IDENTITY_USER"
-state_set "$STATE" "TESTD_IDENTITY_ROLE" "$TESTD_IDENTITY_ROLE"
+TEST_IDENTITY_USER="dr-failover-test-user"
+TEST_IDENTITY_ROLE="dr-failover-test-role"
+state_set "$STATE" "TEST_IDENTITY_USER" "$TEST_IDENTITY_USER"
+state_set "$STATE" "TEST_IDENTITY_ROLE" "$TEST_IDENTITY_ROLE"
 
 KC_ADMIN_PASS=$(oc --context "$CONTEXT_WEST" -n "$NS_WEST" get secret camunda-credentials -o jsonpath='{.data.identity-keycloak-admin-password}' 2>/dev/null | base64 -d)
 PF=$(pf_start "$CONTEXT_WEST" "$NS_WEST" svc/camunda-keycloak 18381 80)
@@ -75,33 +75,33 @@ KC_TOKEN=$(curl -s -X POST "http://localhost:18381/auth/realms/master/protocol/o
 
 IDENTITY_OK=0
 if [ -n "$KC_TOKEN" ]; then
-  info "Creating role '$TESTD_IDENTITY_ROLE' in the camunda-platform realm (idempotent)..."
+  info "Creating role '$TEST_IDENTITY_ROLE' in the camunda-platform realm (idempotent)..."
   curl -s -X POST "http://localhost:18381/auth/admin/realms/camunda-platform/roles" \
     -H "Authorization: Bearer $KC_TOKEN" -H 'Content-Type: application/json' \
-    -d "{\"name\":\"$TESTD_IDENTITY_ROLE\",\"description\":\"DR Test D - created during outage via west, verified after failback via east\"}" > /dev/null
+    -d "{\"name\":\"$TEST_IDENTITY_ROLE\",\"description\":\"DR test - created during outage via west, verified after failback via east\"}" > /dev/null
 
-  info "Creating user '$TESTD_IDENTITY_USER' in the camunda-platform realm (idempotent)..."
-  EXISTING_USER=$(curl -s "http://localhost:18381/auth/admin/realms/camunda-platform/users?username=$TESTD_IDENTITY_USER" \
+  info "Creating user '$TEST_IDENTITY_USER' in the camunda-platform realm (idempotent)..."
+  EXISTING_USER=$(curl -s "http://localhost:18381/auth/admin/realms/camunda-platform/users?username=$TEST_IDENTITY_USER" \
     -H "Authorization: Bearer $KC_TOKEN" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['id'] if d else '')" 2>/dev/null)
   if [ -z "$EXISTING_USER" ]; then
     curl -s -X POST "http://localhost:18381/auth/admin/realms/camunda-platform/users" \
       -H "Authorization: Bearer $KC_TOKEN" -H 'Content-Type: application/json' \
-      -d "{\"username\":\"$TESTD_IDENTITY_USER\",\"email\":\"${TESTD_IDENTITY_USER}@ci.local\",\"enabled\":true,\"emailVerified\":true}" > /dev/null
-    EXISTING_USER=$(curl -s "http://localhost:18381/auth/admin/realms/camunda-platform/users?username=$TESTD_IDENTITY_USER" \
+      -d "{\"username\":\"$TEST_IDENTITY_USER\",\"email\":\"${TEST_IDENTITY_USER}@ci.local\",\"enabled\":true,\"emailVerified\":true}" > /dev/null
+    EXISTING_USER=$(curl -s "http://localhost:18381/auth/admin/realms/camunda-platform/users?username=$TEST_IDENTITY_USER" \
       -H "Authorization: Bearer $KC_TOKEN" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['id'] if d else '')" 2>/dev/null)
   fi
 
   if [ -n "$EXISTING_USER" ]; then
-    info "Assigning role '$TESTD_IDENTITY_ROLE' to '$TESTD_IDENTITY_USER'..."
-    ROLE_JSON=$(curl -s "http://localhost:18381/auth/admin/realms/camunda-platform/roles/$TESTD_IDENTITY_ROLE" \
+    info "Assigning role '$TEST_IDENTITY_ROLE' to '$TEST_IDENTITY_USER'..."
+    ROLE_JSON=$(curl -s "http://localhost:18381/auth/admin/realms/camunda-platform/roles/$TEST_IDENTITY_ROLE" \
       -H "Authorization: Bearer $KC_TOKEN")
     curl -s -X POST "http://localhost:18381/auth/admin/realms/camunda-platform/users/${EXISTING_USER}/role-mappings/realm" \
       -H "Authorization: Bearer $KC_TOKEN" -H 'Content-Type: application/json' \
       -d "[$ROLE_JSON]" > /dev/null
-    ok "User '$TESTD_IDENTITY_USER' created via west with role '$TESTD_IDENTITY_ROLE' - 08-verify-final.sh will confirm this survives failback, visible via east."
+    ok "User '$TEST_IDENTITY_USER' created via west with role '$TEST_IDENTITY_ROLE' - 08-verify-final.sh will confirm this survives failback, visible via east."
     IDENTITY_OK=1
   else
-    fail "Could not find or create '$TESTD_IDENTITY_USER' - check west's Keycloak manually."
+    fail "Could not find or create '$TEST_IDENTITY_USER' - check west's Keycloak manually."
   fi
 else
   fail "Could not obtain a Keycloak admin token via west - skipping user/role creation."

@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
-# Test D's own promote script - identical helm-invocation shape to
-# promote-region.sh, but uses helm-overlays/test-d/*.yaml instead of the
-# shared helm-overlays/*.yaml. The one substantive difference: test-d's
-# active-overlay.yaml does NOT touch orchestration.profiles.operate/tasklist
-# (they're permanently on in test-d/{east,west}-values.yaml instead, same as
-# Identity/Keycloak/Optimize - active-active in both regions now). Connectors
-# is the only component this promotion actually toggles - a Deployment
-# entirely separate from Zeebe's "orchestration" StatefulSet. Zeebe is never
-# restarted by this script, unlike the shared promote-region.sh.
+# Promotes a region to active. Identity, Keycloak, and Optimize run
+# active-active in both regions permanently (see the identityKeycloak
+# comment in helm-overlays/east-values.yaml), and Operate/Tasklist are
+# permanently enabled in helm-overlays/test/{east,west}-values.yaml rather
+# than toggled - so Connectors is the only component this promotion
+# actually touches, a Deployment entirely separate from Zeebe's
+# "orchestration" StatefulSet. Zeebe is never restarted by this script.
 #
-# Keycloak's Postgres is the same standalone, always-on "keycloak-postgres"
-# release shared with the non-Test-D suites (see promote-region.sh's header
-# comment) - its credentials are kept in sync across regions the same way.
+# Keycloak's Postgres is a single standalone, always-on "keycloak-postgres"
+# release shared by both regions - its credentials are kept in sync via
+# ensure_shared_keycloak_db_secret (see scripts/lib/common.sh).
 #
-# Usage: ./promote-region-d.sh <east|west>
+# Usage: ./promote-region.sh <east|west>
 set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/lib/common.sh"
 
@@ -28,13 +26,13 @@ if [ "$REGION" = "east" ]; then
 else
   CTX="$CONTEXT_WEST"; NS="$NS_WEST"
 fi
-MAIN_VALUES="$SCRIPTS_DIR/../helm-overlays/test-d/${REGION}-values.yaml"
-OVERLAY_VALUES="$SCRIPTS_DIR/../helm-overlays/test-d/active-overlay.yaml"
+MAIN_VALUES="$SCRIPTS_DIR/../helm-overlays/test/${REGION}-values.yaml"
+OVERLAY_VALUES="$SCRIPTS_DIR/../helm-overlays/test/active-overlay.yaml"
 USERS_VALUES="$SCRIPTS_DIR/../helm-overlays/orchestration-users.yaml"
 
-header "TEST D: PROMOTE $REGION TO ACTIVE (Connectors only - Zeebe/Operate/Tasklist/Identity/Keycloak/Optimize untouched)"
+header "PROMOTE $REGION TO ACTIVE (Connectors only - Zeebe/Operate/Tasklist/Identity/Keycloak/Optimize untouched)"
 
-info "Ensuring the shared Keycloak Postgres credentials are in sync across both regions (identical in both, since there's only one Keycloak DB - see promote-region.sh's header comment)..."
+info "Ensuring the shared Keycloak Postgres credentials are in sync across both regions (identical in both, since there's only one Keycloak DB)..."
 ensure_shared_keycloak_db_secret "$CTX" "$NS"
 
 info "Ensuring every other per-region DB/admin password key the identity/webModeler sub-charts expect exists in camunda-credentials..."
@@ -54,11 +52,11 @@ for key in identity-postgresql-admin-password \
   fi
 done
 
-info "Scaling up Connectors via a minimal, declarative helm upgrade (Identity/Keycloak/Optimize/Operate/Tasklist are already on, permanently, from test-d/${REGION}-values.yaml)..."
+info "Scaling up Connectors via a minimal, declarative helm upgrade (Identity/Keycloak/Optimize/Operate/Tasklist are already on, permanently, from test/${REGION}-values.yaml)..."
 show_cmd "helm --kube-context $CTX -n $NS upgrade camunda camunda/camunda-platform --version 13.11.1 -f $MAIN_VALUES -f $OVERLAY_VALUES -f $USERS_VALUES --timeout 5m"
 
 # Snapshot Zeebe pod ages before the upgrade, so we can prove afterward that
-# none of them restarted - the whole point of Test D.
+# none of them restarted.
 ZEEBE_AGES_BEFORE=$(oc --context "$CTX" -n "$NS" get pods -l app.kubernetes.io/component=zeebe-broker -o jsonpath='{range .items[*]}{.metadata.name}{"="}{.metadata.creationTimestamp}{" "}{end}' 2>/dev/null || true)
 
 run_cmd helm --kube-context "$CTX" -n "$NS" upgrade camunda camunda/camunda-platform \
@@ -85,12 +83,12 @@ echo
 oc --context "$CTX" -n "$NS" get pods 2>&1
 echo
 
-info "Verifying Zeebe was NOT restarted by this promotion (the whole point of Test D)..."
+info "Verifying Zeebe was NOT restarted by this promotion..."
 ZEEBE_AGES_AFTER=$(oc --context "$CTX" -n "$NS" get pods -l app.kubernetes.io/component=zeebe-broker -o jsonpath='{range .items[*]}{.metadata.name}{"="}{.metadata.creationTimestamp}{" "}{end}' 2>/dev/null || true)
 if [ "$ZEEBE_AGES_BEFORE" = "$ZEEBE_AGES_AFTER" ] && [ -n "$ZEEBE_AGES_BEFORE" ]; then
   ok "Confirmed: all Zeebe broker pod creation timestamps are unchanged - no restart occurred."
 else
-  warn "Zeebe pod creation timestamps changed across this promotion - investigate (this should never happen in Test D)."
+  warn "Zeebe pod creation timestamps changed across this promotion - investigate (this should never happen)."
   warn "Before: $ZEEBE_AGES_BEFORE"
   warn "After:  $ZEEBE_AGES_AFTER"
 fi
@@ -172,4 +170,4 @@ fi
 pf_stop "$PF"
 unset KC_ADMIN_PASS USER_PASS KC_TOKEN CLIENT_UUID
 
-ok "$REGION promoted to active (Test D). Verify the web UI via ./open-cluster.sh $REGION"
+ok "$REGION promoted to active."

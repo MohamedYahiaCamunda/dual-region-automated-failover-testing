@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Test D - Step 0: Baseline
+# Step 0: Baseline
 # Combined-failure scenario: Zeebe and Elasticsearch are destroyed together in
 # a single region, simulating a genuine full region loss. This step creates 5
 # baseline process instances: 3 COMPLETED (to prove ES export/history
@@ -8,10 +8,10 @@
 set -euo pipefail
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 
-STATE=$(state_file "test-d")
+STATE=$(state_file "test")
 : > "$STATE"
 
-header "TEST D - STEP 0: Baseline"
+header "STEP 0: Baseline"
 
 info "Deploying process definition '$PROCESS_ID' (idempotent - new version if already exists)..."
 DEPLOY_RESP=$(deploy_process)
@@ -32,7 +32,7 @@ for i in 1 2 3; do
   echo "  completed instance $i: $KEY"
 done
 COMPLETED_KEYS=$(echo "$COMPLETED_KEYS" | xargs)
-state_set "$STATE" "TESTD_BASELINE_COMPLETED_KEYS" "$COMPLETED_KEYS"
+state_set "$STATE" "TEST_BASELINE_COMPLETED_KEYS" "$COMPLETED_KEYS"
 
 info "Creating 2 ACTIVE (uncompleted/in-flight) baseline instances (batch=baseline-testD)..."
 ACTIVE_KEYS=""
@@ -42,7 +42,7 @@ for i in 4 5; do
   echo "  active (left running) instance $i: $KEY"
 done
 ACTIVE_KEYS=$(echo "$ACTIVE_KEYS" | xargs)
-state_set "$STATE" "TESTD_BASELINE_ACTIVE_KEYS" "$ACTIVE_KEYS"
+state_set "$STATE" "TEST_BASELINE_ACTIVE_KEYS" "$ACTIVE_KEYS"
 
 sleep 5
 ALL_KEYS="$COMPLETED_KEYS $ACTIVE_KEYS"

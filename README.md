@@ -23,8 +23,8 @@ Running end-to-end, the suite proves:
 This suite expects an already-running dual-region Camunda 8 environment with the following shape:
 
 - Two Kubernetes/OpenShift clusters, one per region, with cross-cluster service connectivity (e.g. via [Submariner](https://submariner.io/)) so each region can reach the other's Zeebe brokers and Elasticsearch.
-- Camunda 8 deployed via Helm in both regions, using the values files in `helm-overlays/test-d/` (see [Configuration](#configuration) below) — Zeebe with a replication factor spanning both regions, Identity/Keycloak/Optimize active-active, Connectors active-passive.
-- A single, standalone, always-on PostgreSQL instance for Keycloak, living in one region as its own Helm release (separate from the main Camunda release), reachable from both regions. Both regions' Keycloak point at this one database, so realm/user state survives every failover and failback. (This is the deliberate trade-off documented in `helm-overlays/test-d/east-values.yaml` — if that region is ever genuinely lost, not just simulated, Keycloak cannot come up in the other region either, since its database goes with it.)
+- Camunda 8 deployed via Helm in both regions, using the values files in `helm-overlays/test/` (see [Configuration](#configuration) below) — Zeebe with a replication factor spanning both regions, Identity/Keycloak/Optimize active-active, Connectors active-passive.
+- A single, standalone, always-on PostgreSQL instance for Keycloak, living in one region as its own Helm release (separate from the main Camunda release), reachable from both regions. Both regions' Keycloak point at this one database, so realm/user state survives every failover and failback. (This is the deliberate trade-off documented in `helm-overlays/test/east-values.yaml` — if that region is ever genuinely lost, not just simulated, Keycloak cannot come up in the other region either, since its database goes with it.)
 - One S3-compatible object store per region (e.g. [MinIO](https://min.io/)), each with a bucket already created, configured with **bidirectional bucket replication** between the two regions. Snapshots taken from either region's Elasticsearch become visible to the other automatically.
 - A Zeebe test process deployed with a basic-auth user provisioned (see [Prerequisites](#prerequisites)).
 
@@ -32,19 +32,19 @@ This suite expects an already-running dual-region Camunda 8 environment with the
 
 ```
 scripts/
-  test-d/                        Step 00-08: the test scenario itself
-  promote-region-d.sh             Promotes a region to active (toggles Connectors only)
-  demote-region-d.sh              Demotes a region to passive (toggles Connectors only)
-  reset-cluster-d.sh              Resets both regions to a clean baseline before a run
-  verify-partition-leaders.sh     Read-only: reports Zeebe partition leadership for one region
-  leadership-distribution.sh      Read-only: reports partition leadership across both regions
-  rebalance-partitions.sh         Actively rebalances partition leadership across both regions
-  lib/                            Shared shell helpers and Python table/JSON formatters
-  assets/test-process.bpmn        The BPMN process used to generate test data
+  test/                        Step 00-08: the test scenario itself
+  promote-region.sh            Promotes a region to active (toggles Connectors only)
+  demote-region.sh             Demotes a region to passive (toggles Connectors only)
+  reset-cluster.sh             Resets both regions to a clean baseline before a run
+  verify-partition-leaders.sh  Read-only: reports Zeebe partition leadership for one region
+  leadership-distribution.sh   Read-only: reports partition leadership across both regions
+  rebalance-partitions.sh      Actively rebalances partition leadership across both regions
+  lib/                         Shared shell helpers and Python table/JSON formatters
+  assets/test-process.bpmn     The BPMN process used to generate test data
 
 helm-overlays/
-  test-d/                         Per-region Helm values and active/passive overlays
-  orchestration-users.yaml        Zeebe/Operate/Tasklist basic-auth users (shared, non-secret)
+  test/                        Per-region Helm values and active/passive overlays
+  orchestration-users.yaml     Zeebe/Operate/Tasklist basic-auth users (shared, non-secret)
 ```
 
 ## Prerequisites
@@ -52,7 +52,7 @@ helm-overlays/
 Before running anything:
 
 1. **Cluster access** — `oc` (or `kubectl`) configured with a context for each region. Update the context names and namespaces at the top of `scripts/lib/common.sh` (`CONTEXT_EAST`, `NS_EAST`, `CONTEXT_WEST`, `NS_WEST`) to match your environment.
-2. **Camunda already deployed** in both regions using `helm-overlays/test-d/{east,west}-values.yaml` plus the matching `active-overlay.yaml`/`passive-overlay.yaml`, with all real credentials supplied via the `camunda-credentials` Kubernetes Secret referenced throughout those values files — nothing in this repository contains literal secret values. See [CLUSTER_SETUP.md](CLUSTER_SETUP.md) for a full walkthrough of setting this up from scratch, including cross-cluster connectivity, MinIO replication, and the standalone Keycloak Postgres.
+2. **Camunda already deployed** in both regions using `helm-overlays/test/{east,west}-values.yaml` plus the matching `active-overlay.yaml`/`passive-overlay.yaml`, with all real credentials supplied via the `camunda-credentials` Kubernetes Secret referenced throughout those values files — nothing in this repository contains literal secret values. See [CLUSTER_SETUP.md](CLUSTER_SETUP.md) for a full walkthrough of setting this up from scratch, including cross-cluster connectivity, MinIO replication, and the standalone Keycloak Postgres.
 3. **A basic-auth test user** provisioned in Zeebe/Operate/Tasklist (username/password configured via `AUTH_USER`/`AUTH_PASS` in `scripts/lib/common.sh`).
 4. **MinIO buckets already created** in both regions with bucket replication configured between them (see [CLUSTER_SETUP.md](CLUSTER_SETUP.md#2-object-storage-minio-per-region-with-bucket-replication)). Elasticsearch's own snapshot repository registration is handled by the scripts, but bucket creation itself is an Elasticsearch/object-storage-level action outside this project's scope.
 5. **Command-line tools**: `oc` or `kubectl`, `helm`, `curl`, `python3` (used only for JSON parsing/table formatting, no third-party packages required).
@@ -65,21 +65,21 @@ Every command below is run from the repository root.
 # 1. Reset both regions to a clean baseline (east active, west passive).
 #    This is destructive: it wipes and rebuilds both regions' Elasticsearch and
 #    Zeebe storage. Only run this against a disposable test environment.
-./scripts/reset-cluster-d.sh
+./scripts/reset-cluster.sh
 
 # 2. Run the scenario end-to-end, one step at a time.
-./scripts/test-d/00-baseline.sh                    # create baseline process data
-./scripts/test-d/01-inject-failure.sh              # simulate total loss of east
-./scripts/test-d/02-verify-degraded.sh             # confirm west lost quorum
-./scripts/test-d/03-failover.sh                    # force-remove east's brokers, promote west
-./scripts/test-d/04-verify-existing-data.sh        # confirm baseline data is still served
-./scripts/test-d/05-create-data-during-outage.sh   # create new data + a Keycloak user/role via west
-./scripts/test-d/06-failback.sh                    # rebuild east, restore from west's backup, promote east
-./scripts/test-d/07-check-leadership.sh            # rebalance partition leadership across both regions
-./scripts/test-d/08-verify-final.sh                # final verification, including the Keycloak architecture proof
+./scripts/test/00-baseline.sh                    # create baseline process data
+./scripts/test/01-inject-failure.sh              # simulate total loss of east
+./scripts/test/02-verify-degraded.sh             # confirm west lost quorum
+./scripts/test/03-failover.sh                    # force-remove east's brokers, promote west
+./scripts/test/04-verify-existing-data.sh        # confirm baseline data is still served
+./scripts/test/05-create-data-during-outage.sh   # create new data + a Keycloak user/role via west
+./scripts/test/06-failback.sh                    # rebuild east, restore from west's backup, promote east
+./scripts/test/07-check-leadership.sh            # rebalance partition leadership across both regions
+./scripts/test/08-verify-final.sh                # final verification, including the Keycloak architecture proof
 ```
 
-Each step prints the exact underlying `oc`/`curl`/`helm` command it runs before executing it, so the output doubles as a reference for how to perform each action manually if needed. State (which process instance keys were created, etc.) is passed between steps via `scripts/.state/test-d.env`, which is regenerated on every fresh run.
+Each step prints the exact underlying `oc`/`curl`/`helm` command it runs before executing it, so the output doubles as a reference for how to perform each action manually if needed. State (which process instance keys were created, etc.) is passed between steps via `scripts/.state/test.env`, which is regenerated on every fresh run.
 
 ### Read-only checks
 
@@ -92,7 +92,7 @@ These can be run at any time, independent of the step sequence above, to inspect
 
 ### Manually influencing partition leadership
 
-`rebalance-partitions.sh` (used internally by `test-d/07-check-leadership.sh`) can be run standalone at any time to nudge Zeebe's partition leadership back toward an even split across both regions — useful after any operation that leaves leadership concentrated on one side and never triggers its own rebalance.
+`rebalance-partitions.sh` (used internally by `test/07-check-leadership.sh`) can be run standalone at any time to nudge Zeebe's partition leadership back toward an even split across both regions — useful after any operation that leaves leadership concentrated on one side and never triggers its own rebalance.
 
 ```bash
 ./scripts/rebalance-partitions.sh east
@@ -103,7 +103,7 @@ These can be run at any time, independent of the step sequence above, to inspect
 All environment-specific values live in two places:
 
 - **`scripts/lib/common.sh`** — cluster contexts, namespaces, test-user credentials, and the BPMN process file used to generate data. Every other script sources this file.
-- **`helm-overlays/test-d/*.yaml`** — the Helm values and overlays applied by `promote-region-d.sh`/`demote-region-d.sh`. Every credential referenced here is a Kubernetes Secret key reference (`secretKeyRef`), never a literal value, with one documented exception: `orchestration.security.initialization.users[].password` is rendered as plaintext into a ConfigMap by the Camunda Helm chart regardless of how it's supplied — a chart limitation, not a choice made by this project — which is why `helm-overlays/orchestration-users.yaml` is checked in as a plain values file rather than a secret reference.
+- **`helm-overlays/test/*.yaml`** — the Helm values and overlays applied by `promote-region.sh`/`demote-region.sh`. Every credential referenced here is a Kubernetes Secret key reference (`secretKeyRef`), never a literal value, with one documented exception: `orchestration.security.initialization.users[].password` is rendered as plaintext into a ConfigMap by the Camunda Helm chart regardless of how it's supplied — a chart limitation, not a choice made by this project — which is why `helm-overlays/orchestration-users.yaml` is checked in as a plain values file rather than a secret reference.
 
 ## Design notes
 

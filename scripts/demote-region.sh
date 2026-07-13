@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Test D's own demote script - see promote-region-d.sh's header comment.
-# Only touches Connectors now; Identity/Keycloak/Optimize/Operate/Tasklist
+# Demotes a region to passive - see promote-region.sh's header comment.
+# Only touches Connectors; Identity/Keycloak/Optimize/Operate/Tasklist
 # and Zeebe are never touched, so Zeebe is never restarted by this script.
 #
-# Usage: ./demote-region-d.sh <east|west>
+# Usage: ./demote-region.sh <east|west>
 set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/lib/common.sh"
 
@@ -18,15 +18,15 @@ if [ "$REGION" = "east" ]; then
 else
   CTX="$CONTEXT_WEST"; NS="$NS_WEST"
 fi
-MAIN_VALUES="$SCRIPTS_DIR/../helm-overlays/test-d/${REGION}-values.yaml"
-OVERLAY_VALUES="$SCRIPTS_DIR/../helm-overlays/test-d/passive-overlay.yaml"
+MAIN_VALUES="$SCRIPTS_DIR/../helm-overlays/test/${REGION}-values.yaml"
+OVERLAY_VALUES="$SCRIPTS_DIR/../helm-overlays/test/passive-overlay.yaml"
 USERS_VALUES="$SCRIPTS_DIR/../helm-overlays/orchestration-users.yaml"
 
-header "TEST D: DEMOTE $REGION TO PASSIVE (Connectors only - Zeebe/Operate/Tasklist/Identity/Keycloak/Optimize untouched)"
+header "DEMOTE $REGION TO PASSIVE (Connectors only - Zeebe/Operate/Tasklist/Identity/Keycloak/Optimize untouched)"
 
 ZEEBE_AGES_BEFORE=$(oc --context "$CTX" -n "$NS" get pods -l app.kubernetes.io/component=zeebe-broker -o jsonpath='{range .items[*]}{.metadata.name}{"="}{.metadata.creationTimestamp}{" "}{end}' 2>/dev/null || true)
 
-info "Scaling down Connectors via a minimal, declarative helm upgrade (Identity/Keycloak/Optimize/Operate/Tasklist stay on, permanently, per test-d/${REGION}-values.yaml)..."
+info "Scaling down Connectors via a minimal, declarative helm upgrade (Identity/Keycloak/Optimize/Operate/Tasklist stay on, permanently, per test/${REGION}-values.yaml)..."
 show_cmd "helm --kube-context $CTX -n $NS upgrade camunda camunda/camunda-platform --version 13.11.1 -f $MAIN_VALUES -f $OVERLAY_VALUES -f $USERS_VALUES --timeout 5m"
 run_cmd helm --kube-context "$CTX" -n "$NS" upgrade camunda camunda/camunda-platform \
   --version 13.11.1 \
@@ -56,9 +56,9 @@ ZEEBE_AGES_AFTER=$(oc --context "$CTX" -n "$NS" get pods -l app.kubernetes.io/co
 if [ "$ZEEBE_AGES_BEFORE" = "$ZEEBE_AGES_AFTER" ] && [ -n "$ZEEBE_AGES_BEFORE" ]; then
   ok "Confirmed: all Zeebe broker pod creation timestamps are unchanged - no restart occurred."
 else
-  warn "Zeebe pod creation timestamps changed across this demotion - investigate (this should never happen in Test D)."
+  warn "Zeebe pod creation timestamps changed across this demotion - investigate (this should never happen)."
   warn "Before: $ZEEBE_AGES_BEFORE"
   warn "After:  $ZEEBE_AGES_AFTER"
 fi
 
-ok "$REGION demoted to passive (Test D). Zeebe/Elasticsearch/Operate/Tasklist/Identity/Keycloak/Optimize remain untouched."
+ok "$REGION demoted to passive. Zeebe/Elasticsearch/Operate/Tasklist/Identity/Keycloak/Optimize remain untouched."

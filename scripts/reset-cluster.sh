@@ -1,26 +1,24 @@
 #!/usr/bin/env bash
-# Test D's own reset script - see reset-cluster.sh's header comment for the
-# shared Test A/B/C version. This is the same "wipe everything, rebuild a
-# clean baseline" reset, but restores Test D's baseline instead:
+# Resets both regions to a clean baseline before running the test scenario
+# from scratch, regardless of what state a previous run left things in:
 #   - Unconditionally wipes and recreates BOTH regions' Elasticsearch (fresh
 #     PVCs, both regions, every run) - including re-registering MinIO
-#     keystore/snapshot repo credentials. Identical to the shared reset.
+#     keystore/snapshot repo credentials.
 #   - Always does a full fresh bootstrap of Zeebe in BOTH regions (the only
 #     reliable way to restore true RF4). This PVC wipe/rebuild is a
 #     deliberate, expected Zeebe restart - it's the "start from zero" step of
-#     a reset, not the kind of unnecessary restart Test D exists to avoid
-#     (which is Zeebe being restarted merely as a side effect of toggling
-#     unrelated Operate/Tasklist flags during promote/demote).
+#     a reset, not the kind of unnecessary restart this suite otherwise
+#     avoids (Zeebe restarting merely as a side effect of an unrelated
+#     promote/demote operation).
 #   - Force-resumes exporting and re-enables both exporters.
-#   - Resets active-passive component roles back to Test D's canonical
-#     baseline using promote-region-d.sh / demote-region-d.sh (NOT the shared
-#     promote-region.sh/demote-region.sh) and the helm-overlays/test-d/*.yaml
-#     files: east ACTIVE (Connectors/Identity/Keycloak/Optimize), west
-#     PASSIVE. Operate/Tasklist are never toggled here - they're permanently
-#     baked on in helm-overlays/test-d/{east,west}-values.yaml, so there's
-#     nothing to reset for them.
-#   - Clears scripts/.state/test-d.env only (test-a/b/c's state files are
-#     untouched - use reset-cluster.sh for those suites).
+#   - Resets active-passive component roles back to the canonical baseline
+#     using promote-region.sh / demote-region.sh and the
+#     helm-overlays/test/*.yaml files: east ACTIVE (Connectors/Identity/
+#     Keycloak/Optimize), west PASSIVE. Operate/Tasklist are never toggled
+#     here - they're permanently baked on in
+#     helm-overlays/test/{east,west}-values.yaml, so there's nothing to
+#     reset for them.
+#   - Clears scripts/.state/test.env.
 #
 # Deliberately NOT touched: the standalone "keycloak-postgres" Helm release in
 # east (Keycloak's one, shared, always-on Postgres - see helm-overlays/
@@ -31,13 +29,13 @@
 set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/lib/common.sh"
 
-header "RESET (TEST D): restoring the full Camunda footprint (both regions) to Test D's clean baseline"
+header "RESET: restoring the full Camunda footprint (both regions) to a clean baseline"
 
-confirm_destructive "This wipes ALL 8 Zeebe PVCs AND both regions' Elasticsearch PVCs (data-camunda-elasticsearch-master-0/1/2, east and west) unconditionally for a full fresh bootstrap, and resets active-passive component roles to east=active/west=passive via promote-region-d.sh/demote-region-d.sh (Test D's Zeebe-restart-free variant). ALL existing process data (Zeebe engine state and Elasticsearch history) will be lost - this is a genuinely clean slate, not just a repair of whatever looks broken."
+confirm_destructive "This wipes ALL 8 Zeebe PVCs AND both regions' Elasticsearch PVCs (data-camunda-elasticsearch-master-0/1/2, east and west) unconditionally for a full fresh bootstrap, and resets active-passive component roles to east=active/west=passive via promote-region.sh/demote-region.sh (both Zeebe-restart-free). ALL existing process data (Zeebe engine state and Elasticsearch history) will be lost - this is a genuinely clean slate, not just a repair of whatever looks broken."
 
 # recreate_es CTX NS LPORT REGION_LABEL -> unconditionally scales that
 # region's Elasticsearch to 0, deletes its 3 PVCs, scales back to 3, and
-# re-registers the MinIO keystore/snapshot repo. Identical to reset-cluster.sh.
+# re-registers the MinIO keystore/snapshot repo.
 recreate_es() {
   local ctx="$1" ns="$2" lport="$3" region_label="$4"
 
@@ -122,20 +120,18 @@ set_exporter "$CONTEXT_EAST" "$NS_EAST" camunda-zeebe-0 19600 camundaregion1 ena
 sleep 8
 get_exporters_json "$CONTEXT_EAST" "$NS_EAST" camunda-zeebe-0 19600 | python3 "$LIB_DIR/exporters_view.py" "Exporter Status" || true
 
-# --- 4. Reset active-passive component roles to Test D's canonical baseline ---
-header "4/5: Resetting active-passive roles (east=active, west=passive) - Test D variant, no Zeebe restart"
-"$SCRIPTS_DIR/promote-region-d.sh" east
-"$SCRIPTS_DIR/demote-region-d.sh" west
+# --- 4. Reset active-passive component roles to the canonical baseline ---
+header "4/5: Resetting active-passive roles (east=active, west=passive) - no Zeebe restart"
+"$SCRIPTS_DIR/promote-region.sh" east
+"$SCRIPTS_DIR/demote-region.sh" west
 
 # --- 5. Verify + clear state ---
-header "5/5: Verifying clean baseline and clearing Test D state"
-# A flat sleep here is not enough: promote-region-d.sh/demote-region-d.sh
-# don't restart Zeebe on repeated use, but the FIRST time this runs against a
-# region that was last deployed via the shared (non-Test-D) values lineage,
-# switching to test-d/*.yaml is itself a genuine one-time values diff (still
-# just a comment/whitespace difference in the rendered manifest, but enough
-# to change the StatefulSet's pod template hash and trigger one real rolling
-# restart) - so wait for actual Zeebe readiness, not a guessed delay.
+header "5/5: Verifying clean baseline and clearing test state"
+# A flat sleep here is not enough: promote-region.sh/demote-region.sh don't
+# restart Zeebe on repeated use, but a values-file change (e.g. after editing
+# helm-overlays/test/*.yaml) can still change the StatefulSet's pod template
+# hash and trigger one real rolling restart - so wait for actual Zeebe
+# readiness, not a guessed delay.
 if ! wait_for_zeebe_pods "$CONTEXT_EAST" "$NS_EAST" 4 || ! wait_for_zeebe_pods "$CONTEXT_WEST" "$NS_WEST" 4; then
   warn "Zeebe pods did not all reach 1/1 in time - checks below may still show stale/unreachable results."
 fi
@@ -151,18 +147,18 @@ get_readiness_json "$CONTEXT_WEST" "$NS_WEST" camunda-zeebe-0 19700 | python3 "$
 # Connectors is the only genuinely active-passive component left to check.
 EAST_PASSIVE_UP=$(oc --context "$CONTEXT_EAST" -n "$NS_EAST" get pods --no-headers 2>/dev/null | grep -cE "camunda-connectors" || true)
 WEST_PASSIVE_DOWN=$(oc --context "$CONTEXT_WEST" -n "$NS_WEST" get pods --no-headers 2>/dev/null | grep -cE "camunda-connectors" || true)
-printf 'Check\tResult\n' > /tmp/dr_reset_roles_d.tsv
-printf 'East Connectors running\t%s (expect >0)\n' "$EAST_PASSIVE_UP" >> /tmp/dr_reset_roles_d.tsv
-printf 'West Connectors running\t%s (expect 0)\n' "$WEST_PASSIVE_DOWN" >> /tmp/dr_reset_roles_d.tsv
-table < /tmp/dr_reset_roles_d.tsv
+printf 'Check\tResult\n' > /tmp/dr_reset_roles.tsv
+printf 'East Connectors running\t%s (expect >0)\n' "$EAST_PASSIVE_UP" >> /tmp/dr_reset_roles.tsv
+printf 'West Connectors running\t%s (expect 0)\n' "$WEST_PASSIVE_DOWN" >> /tmp/dr_reset_roles.tsv
+table < /tmp/dr_reset_roles.tsv
 
-: > "$(state_file "test-d")"
-ok "Cleared scripts/.state/test-d.env."
+: > "$(state_file "test")"
+ok "Cleared scripts/.state/test.env."
 
 echo
 if [ "$RF_OK" -eq 0 ] && [ "$READY_E" -eq 0 ] && [ "$READY_W" -eq 0 ] && [ "$EAST_PASSIVE_UP" -gt 0 ] && [ "$WEST_PASSIVE_DOWN" -eq 0 ]; then
-  echo "${C_BOLD}${C_GREEN}✔ RESET COMPLETE - full Camunda footprint (both regions) is back to Test D's clean baseline.${C_RESET}"
-  echo "You can now restart from ./test-d/00-baseline.sh"
+  echo "${C_BOLD}${C_GREEN}✔ RESET COMPLETE - full Camunda footprint (both regions) is back to a clean baseline.${C_RESET}"
+  echo "You can now restart from ./scripts/test/00-baseline.sh"
 else
   fail "Reset finished but verification shows issues above (RF/readiness/roles) - review before restarting a test."
   exit 1

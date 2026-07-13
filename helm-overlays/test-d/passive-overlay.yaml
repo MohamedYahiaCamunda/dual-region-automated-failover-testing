@@ -1,7 +1,0 @@
-# Test D passive overlay. See the header comment in
-# test-d/active-overlay.yaml: Operate/Tasklist and Identity/Keycloak/Optimize
-# are not toggled here, since they are permanently on in
-# test-d/east-values.yaml and test-d/west-values.yaml. Connectors is the only
-# component that is genuinely active-passive.
-connectors:
-  replicas: 0

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Test D - Step 4: Verify existing (baseline) data is still accessible
+# Step 4: Verify existing (baseline) data is still accessible
 # West was never touched, so this check is expected to pass trivially,
 # including for the 2 ACTIVE (uncompleted) instances, which confirms that
 # Zeebe's own replicated state survived the failover. East is completely
@@ -8,16 +8,16 @@
 set -euo pipefail
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 
-STATE=$(state_file "test-d")
+STATE=$(state_file "test")
 state_load "$STATE"
-require_state TESTD_BASELINE_COMPLETED_KEYS "./00-baseline.sh"
-require_state TESTD_BASELINE_ACTIVE_KEYS "./00-baseline.sh"
+require_state TEST_BASELINE_COMPLETED_KEYS "./00-baseline.sh"
+require_state TEST_BASELINE_ACTIVE_KEYS "./00-baseline.sh"
 
-header "TEST D - STEP 4: Verify existing baseline data"
+header "STEP 4: Verify existing baseline data"
 
-ALL_KEYS="$TESTD_BASELINE_COMPLETED_KEYS $TESTD_BASELINE_ACTIVE_KEYS"
+ALL_KEYS="$TEST_BASELINE_COMPLETED_KEYS $TEST_BASELINE_ACTIVE_KEYS"
 CSV=$(join_csv "$ALL_KEYS")
-ACTIVE_CSV=$(join_csv "$TESTD_BASELINE_ACTIVE_KEYS")
+ACTIVE_CSV=$(join_csv "$TEST_BASELINE_ACTIVE_KEYS")
 WEST_COUNT=$(es_query_count "$CONTEXT_WEST" "$NS_WEST" 19201 "$CSV")
 WEST_ACTIVE=$(es_query_count_by_state "$CONTEXT_WEST" "$NS_WEST" 19201 "$ACTIVE_CSV" "ACTIVE")
 

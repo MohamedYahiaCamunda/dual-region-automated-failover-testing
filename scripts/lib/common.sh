@@ -9,7 +9,7 @@ mkdir -p "$STATE_DIR"
 
 # --- Environment ---
 # Update these to match your own clusters, or override any of them via
-# environment variable before running a script (e.g. AUTH_PASS=... ./scripts/test-d/00-baseline.sh).
+# environment variable before running a script (e.g. AUTH_PASS=... ./scripts/test/00-baseline.sh).
 CONTEXT_EAST="${CONTEXT_EAST:-camunda-dr-east}"
 NS_EAST="${NS_EAST:-camunda-dr-east-ns}"
 CONTEXT_WEST="${CONTEXT_WEST:-camunda-dr-west}"
@@ -491,7 +491,7 @@ toggle_operate_tasklist() {
 # user-password - MUST be byte-identical in both regions' camunda-credentials
 # secrets, or whichever region connects second will either fail to reach the
 # DB (wrong DB password) or fail its own later Keycloak-admin-API calls in
-# promote-region.sh/promote-region-d.sh (wrong app-admin password). Naively
+# promote-region.sh/promote-region.sh (wrong app-admin password). Naively
 # generating any of these independently per region (the way every other
 # per-region key here is handled) would silently desync them the next time
 # either region rebuilds this secret from scratch. This function keeps them

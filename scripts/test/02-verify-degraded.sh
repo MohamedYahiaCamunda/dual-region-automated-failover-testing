@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Test D - Step 2: Verify the degraded state
+# Step 2: Verify the degraded state
 # East is fully down - both Zeebe and Elasticsearch - so all checks run
-# against west, the surviving region. The expected signature is the same
-# "no leader anywhere" state seen in Test A, plus east's Elasticsearch being
-# genuinely gone rather than merely unreachable.
+# against west, the surviving region. The expected signature is a
+# "no leader anywhere" state, plus east's Elasticsearch being genuinely gone
+# rather than merely unreachable.
 set -euo pipefail
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 
-header "TEST D - STEP 2: Verify degraded state"
+header "STEP 2: Verify degraded state"
 
 warn "Note: /actuator/cluster still lists east's brokers as ACTIVE right now - that's"
 warn "topology CONFIG, not live reachability. It does NOT mean the failure didn't happen."

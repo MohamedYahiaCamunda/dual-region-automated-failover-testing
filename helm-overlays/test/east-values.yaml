@@ -1,7 +1,25 @@
-# Test D main values file for west. See the header comment in
-# test-d/east-values.yaml for the full rationale (Operate/Tasklist
-# permanently on in both regions, never part of the active/passive toggle -
-# Zeebe is never restarted by a promotion/demotion in Test D).
+# Main values file for east. Applied on every helm upgrade together with
+# either active-overlay.yaml or passive-overlay.yaml from this same test/
+# directory.
+#
+# Operate and Tasklist are permanently enabled here (orchestration.profiles
+# below), and are not part of the active/passive toggle at all. Toggling
+# them lives in the same "orchestration" StatefulSet as the Zeebe broker
+# itself (this chart's consolidated pod model), so flipping them, even
+# alone, forces a Kubernetes pod-template change and rolls every Zeebe
+# broker. This suite's purpose is to verify that Zeebe is never restarted by
+# a promotion/demotion - only Identity, Keycloak, Optimize, and Connectors
+# toggle, all separate Deployments with no effect on the orchestration
+# StatefulSet. Zeebe cluster membership changes only via the raw actuator
+# API (force-remove/add); this file simply stops an unrelated helm upgrade
+# from also restarting brokers as a side effect.
+#
+# Every credential here is a reference into the "camunda-credentials" Secret;
+# nothing in this file is a literal secret value. The one exception is
+# orchestration.security.initialization.users[].password, which the chart
+# renders as plaintext into a ConfigMap with no secretKeyRef option. That
+# field is deliberately left unset here - promote-region.sh/demote-region.sh
+# supply it via the shared, checked-in helm-overlays/orchestration-users.yaml.
 connectors:
   enabled: true
 elasticsearch:
@@ -41,13 +59,13 @@ global:
       publicIssuerUrl: "http://camunda-keycloak/auth/realms/camunda-platform"
       issuerBackendUrl: "http://camunda-keycloak/auth/realms/camunda-platform"
   multiregion:
-    regionId: 1
+    regionId: 0
     regions: 2
 identity:
-  # Active-active in both regions, permanently - see the comment in
-  # test-d/east-values.yaml.
+  # Active-active in both regions, permanently. Connectors is the only
+  # component that stays active-passive.
   enabled: true
-  fullURL: "http://localhost:18281"
+  fullURL: "http://localhost:18280"
   env:
     - name: KEYCLOAK_URL
       value: "http://camunda-keycloak/auth"
@@ -84,8 +102,7 @@ optimize:
   enabled: true
 orchestration:
   clusterSize: "8"
-  # Permanently on in both regions - see the comment in
-  # test-d/east-values.yaml.
+  # Permanently on in both regions - see the note at the top of this file.
   profiles:
     operate: true
     tasklist: true
@@ -119,7 +136,7 @@ orchestration:
   - name: ZEEBE_BROKER_BACKPRESSURE_AIMD_REQUESTTIMEOUT
     value: 1s
   - name: ZEEBE_BROKER_NETWORK_ADVERTISEDHOST
-    value: $(K8S_NAME).yahia-dr-559de-2.camunda-zeebe.camunda-yahia-dr-559de-2.svc.clusterset.local
+    value: $(K8S_NAME).local-cluster.camunda-zeebe.camunda-yahia-dr-559de-1.svc.clusterset.local
   - name: ZEEBE_BROKER_GATEWAY_CLUSTER_MESSAGECOMPRESSION
     value: GZIP
   - name: ZEEBE_BROKER_GATEWAY_CLUSTER_MEMBERSHIP_PROBETIMEOUT

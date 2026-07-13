@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
-# Test D - Step 1: Inject failure (combined Zeebe + Elasticsearch)
+# Step 1: Inject failure (combined Zeebe + Elasticsearch)
 # Destroys east's Zeebe (scaled to 0, with PVCs left intact for now - the
 # fresh bootstrap performed during failback will wipe them, since a full
-# re-bootstrap is the only reliable way to restore RF4, consistent with
-# Test A) and east's Elasticsearch data (PVCs deleted immediately, since a
-# mere restart would not exercise the snapshot/restore mechanism, consistent
-# with Test B).
+# re-bootstrap is the only reliable way to restore RF4) and east's
+# Elasticsearch data (PVCs deleted immediately, since a mere restart would
+# not exercise the snapshot/restore mechanism).
 # East also hosts the active-passive components in this environment, so this
 # step represents a genuine "primary site totally lost" drill, not the loss
 # of a single subsystem.
 set -euo pipefail
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 
-header "TEST D - STEP 1: Inject failure (destroy EAST's Zeebe AND Elasticsearch)"
+header "STEP 1: Inject failure (destroy EAST's Zeebe AND Elasticsearch)"
 
 confirm_destructive "This scales east's Zeebe to 0 AND deletes east's 3 Elasticsearch PVCs (data-camunda-elasticsearch-master-0/1/2). The ES data also exists in west's ES, so nothing is permanently lost, but this simulates a genuine full loss of the primary region."
 
@@ -58,4 +57,4 @@ else
   exit 1
 fi
 
-next_step "./02-verify-degraded.sh   (confirm west sees quorum loss - same signature as Test A)"
+next_step "./02-verify-degraded.sh   (confirm west sees quorum loss)"

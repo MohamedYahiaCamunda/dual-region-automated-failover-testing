@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Test D - Step 3: Failover (combined)
+# Step 3: Failover (combined)
 # Performs three actions:
-#   1. Force-removes east's dead brokers from the Zeebe topology (as in
-#      Test A/C), required because Zeebe itself lost quorum. This is the only
-#      mechanism that ever changes Zeebe's own membership in Test D - a raw
-#      actuator API call, never a Kubernetes-level scale/restart.
+#   1. Force-removes east's dead brokers from the Zeebe topology, required
+#      because Zeebe itself lost quorum. This is the only mechanism that ever
+#      changes Zeebe's own membership in this suite - a raw actuator API
+#      call, never a Kubernetes-level scale/restart.
 #   2. Disables camundaregion0 (east's exporter) only. camundaregion1 (west)
 #      stays enabled throughout; it is only briefly paused later, around the
 #      backup snapshot (see 06-failback.sh), not disabled here.
-#   3. Promotes west's active-passive components via promote-region-d.sh -
+#   3. Promotes west's active-passive components via promote-region.sh -
 #      Identity/Keycloak/Optimize/Connectors only. Operate/Tasklist are
-#      already permanently on (test-d/west-values.yaml), so this step does
+#      already permanently on (test/west-values.yaml), so this step does
 #      not touch the orchestration StatefulSet Zeebe lives in: west's
 #      brokers, which just won the failover above, are never restarted by
 #      this promotion.
@@ -19,7 +19,7 @@
 set -euo pipefail
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 
-header "TEST D - STEP 3: Failover (force-remove brokers + disable east's exporter)"
+header "STEP 3: Failover (force-remove brokers + disable east's exporter)"
 
 info "Part 1/2: Submitting PATCH /actuator/cluster?force=true to remove brokers 0,2,4,6 (via west, the only reachable region)..."
 RESP=$(patch_cluster "$CONTEXT_WEST" "$NS_WEST" camunda-zeebe-0 19700 '{"brokers":{"remove":[0,2,4,6]}}' true)
@@ -82,7 +82,7 @@ else
 fi
 
 echo
-header "Promoting west's active-passive components (east hosted them, east is gone) - Test D variant, no Zeebe restart"
-"$SCRIPTS_DIR/promote-region-d.sh" west
+header "Promoting west's active-passive components (east hosted them, east is gone) - no Zeebe restart"
+"$SCRIPTS_DIR/promote-region.sh" west
 
 next_step "./04-verify-existing-data.sh   (confirm baseline data still accessible via west)"

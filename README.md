@@ -1,5 +1,7 @@
 # Dual-Region Automated Failover Testing
 
+> **Disclaimer**: this repository is provided as a **reference implementation** of how backup, restore, failover, and failback can be performed and verified in a dual-region Camunda 8 deployment. It is **not intended for production use**. It has only been exercised against disposable test clusters, and does not carry any guarantee of correctness, security hardening, or fitness for a production environment. Review, adapt, and test thoroughly against your own environment and requirements before using any part of it beyond this reference purpose.
+
 Automated disaster-recovery test suite for a dual-region [Camunda 8](https://camunda.com/platform/) deployment. It scripts a full, repeatable failure-and-recovery cycle across two regions — East (primary) and West (secondary) — and verifies at every stage that data, engine state, and identity/authorization data all survive correctly.
 
 This suite is commonly referred to as **Test D**: the variant of the dual-region failover drill built around one core guarantee — **Zeebe is never restarted** by promoting or demoting a region. Every other component (Identity, Keycloak, Optimize) runs active-active across both regions permanently; only Connectors is genuinely toggled active/passive. This removes the operational risk of an unrelated administrative action (promoting a region) triggering a disruptive rolling restart of the Zeebe cluster.
@@ -50,9 +52,9 @@ helm-overlays/
 Before running anything:
 
 1. **Cluster access** — `oc` (or `kubectl`) configured with a context for each region. Update the context names and namespaces at the top of `scripts/lib/common.sh` (`CONTEXT_EAST`, `NS_EAST`, `CONTEXT_WEST`, `NS_WEST`) to match your environment.
-2. **Camunda already deployed** in both regions using `helm-overlays/test-d/{east,west}-values.yaml` plus the matching `active-overlay.yaml`/`passive-overlay.yaml`, with all real credentials supplied via the `camunda-credentials` Kubernetes Secret referenced throughout those values files — nothing in this repository contains literal secret values.
+2. **Camunda already deployed** in both regions using `helm-overlays/test-d/{east,west}-values.yaml` plus the matching `active-overlay.yaml`/`passive-overlay.yaml`, with all real credentials supplied via the `camunda-credentials` Kubernetes Secret referenced throughout those values files — nothing in this repository contains literal secret values. See [CLUSTER_SETUP.md](CLUSTER_SETUP.md) for a full walkthrough of setting this up from scratch, including cross-cluster connectivity, MinIO replication, and the standalone Keycloak Postgres.
 3. **A basic-auth test user** provisioned in Zeebe/Operate/Tasklist (username/password configured via `AUTH_USER`/`AUTH_PASS` in `scripts/lib/common.sh`).
-4. **MinIO buckets already created** in both regions with bucket replication configured between them. Elasticsearch's own snapshot repository registration is handled by the scripts, but bucket creation itself is an Elasticsearch/object-storage-level action outside this project's scope — see your object storage's documentation (e.g. MinIO's `mc mb`) for that one-time setup step.
+4. **MinIO buckets already created** in both regions with bucket replication configured between them (see [CLUSTER_SETUP.md](CLUSTER_SETUP.md#2-object-storage-minio-per-region-with-bucket-replication)). Elasticsearch's own snapshot repository registration is handled by the scripts, but bucket creation itself is an Elasticsearch/object-storage-level action outside this project's scope.
 5. **Command-line tools**: `oc` or `kubectl`, `helm`, `curl`, `python3` (used only for JSON parsing/table formatting, no third-party packages required).
 
 ## Quick start

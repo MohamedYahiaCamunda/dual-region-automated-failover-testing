@@ -1,6 +1,8 @@
 # Dual-Region Automated Failover Testing
 
 > **Disclaimer**: this repository is provided as a **reference implementation** of how backup, restore, failover, and failback can be performed and verified in a dual-region Camunda 8 deployment. It is **not intended for production use**. It has only been exercised against disposable test clusters, and does not carry any guarantee of correctness, security hardening, or fitness for a production environment. Review, adapt, and test thoroughly against your own environment and requirements before using any part of it beyond this reference purpose.
+>
+> This is an independent engineering effort by **Mohamed Yahia**, built to explore and validate the dual-region failover/failback process through automation. It is **not an officially documented or maintained Camunda resource**. For the authoritative, official procedure, refer to Camunda's own documentation — see [References](#references) below, starting with the [dual-region operational procedure](https://docs.camunda.io/docs/self-managed/deployment/helm/operational-tasks/dual-region-operational-procedure/).
 
 Automated disaster-recovery test suite for a dual-region [Camunda 8](https://camunda.com/platform/) deployment. It scripts a full, repeatable failure-and-recovery cycle across two regions — East (primary) and West (secondary) — and verifies at every stage that data, engine state, and identity/authorization data all survive correctly.
 

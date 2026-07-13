@@ -7,6 +7,11 @@
 > deployment guide, and every step below should be reviewed and adapted to
 > your own infrastructure, security requirements, and Camunda license
 > before use.
+>
+> This setup is a reference implementation of the official
+> [dual-region operational procedure](https://docs.camunda.io/docs/self-managed/deployment/helm/operational-tasks/dual-region-operational-procedure/)
+> from the Camunda 8 documentation — start there for the authoritative
+> description of the architecture this environment implements.
 
 This assumes two separate Kubernetes/OpenShift clusters already exist — one
 per region — with `oc`/`kubectl` access configured for each.

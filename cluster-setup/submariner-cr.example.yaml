@@ -1,0 +1,32 @@
+# Reference only - illustrates the shape of the `Submariner` custom resource
+# that gets created automatically in the submariner-operator namespace of
+# each cluster once you join it to a broker (see CLUSTER_SETUP.md section 1),
+# whether via the `subctl join` CLI or via Red Hat Advanced Cluster
+# Management's Submariner add-on. You do not create or apply this resource
+# yourself - it's generated for you and shown here purely so you know what
+# to expect when inspecting your own cluster with:
+#
+#   oc --context <context> -n submariner-operator get submariner submariner -o yaml
+#
+# Every broker-connection field below (API server address, service-account
+# token, CA bundle, pre-shared key) is unique to your own broker and cluster,
+# is regenerated on each join, and must never be copied between environments
+# or committed to version control - the placeholders here are illustrative
+# only, not real values.
+apiVersion: submariner.io/v1alpha1
+kind: Submariner
+metadata:
+  name: submariner
+  namespace: submariner-operator
+spec:
+  broker: k8s
+  brokerK8sApiServer: "<broker-api-server-host:port>"
+  brokerK8sApiServerToken: "<broker-service-account-token>"
+  brokerK8sCA: "<broker-ca-bundle>"
+  brokerK8sRemoteNamespace: "<broker-namespace>"
+  cableDriver: libreswan
+  ceIPSecPSK: "<generated-pre-shared-key>"
+  clusterID: "<this-cluster-id>"
+  namespace: submariner-operator
+  natEnabled: true
+  serviceDiscoveryEnabled: true

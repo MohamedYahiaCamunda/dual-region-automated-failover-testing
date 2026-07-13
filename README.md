@@ -50,7 +50,8 @@ helm-overlays/
   orchestration-users.yaml     Zeebe/Operate/Tasklist basic-auth users (template, non-secret)
 
 cluster-setup/                 Reference Kubernetes manifests used by CLUSTER_SETUP.md
-                                (MinIO deployment, cross-cluster ServiceExports)
+                                (MinIO deployment, cross-cluster ServiceExports,
+                                the Submariner CR shape)
 ```
 
 ## Prerequisites

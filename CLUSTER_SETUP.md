@@ -68,6 +68,17 @@ substituted — the values files in this repository only depend on a
 resolvable `<service>.<namespace>.svc.clusterset.local` style hostname, not
 on Submariner specifically.
 
+`subctl join` (or an equivalent add-on, such as Red Hat Advanced Cluster
+Management's Submariner integration) creates a `Submariner` custom resource
+in each cluster's `submariner-operator` namespace for you — you never write
+or apply this resource yourself. See
+[`cluster-setup/submariner-cr.example.yaml`](cluster-setup/submariner-cr.example.yaml)
+if you want to know what to expect when inspecting it
+(`oc -n submariner-operator get submariner submariner -o yaml`); every
+broker-connection value in it is unique to your own environment and
+regenerated on each join, so nothing there should ever be copied between
+environments or committed anywhere.
+
 ## 2. Object storage (MinIO) per region, with bucket replication
 
 Each region needs its own S3-compatible object store, used both as

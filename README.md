@@ -4,7 +4,7 @@
 
 Automated disaster-recovery test suite for a dual-region [Camunda 8](https://camunda.com/platform/) deployment. It scripts a full, repeatable failure-and-recovery cycle across two regions — East (primary) and West (secondary) — and verifies at every stage that data, engine state, and identity/authorization data all survive correctly.
 
-This suite is commonly referred to as **Test D**: the variant of the dual-region failover drill built around one core guarantee — **Zeebe is never restarted** by promoting or demoting a region. Every other component (Identity, Keycloak, Optimize) runs active-active across both regions permanently; only Connectors is genuinely toggled active/passive. This removes the operational risk of an unrelated administrative action (promoting a region) triggering a disruptive rolling restart of the Zeebe cluster.
+This suite is built around one core guarantee — **Zeebe is never restarted** by promoting or demoting a region. Every other component (Identity, Keycloak, Optimize) runs active-active across both regions permanently; only Connectors is genuinely toggled active/passive. This removes the operational risk of an unrelated administrative action (promoting a region) triggering a disruptive rolling restart of the Zeebe cluster.
 
 ## What this suite verifies
 
@@ -62,7 +62,7 @@ Before running anything:
 Every command below is run from the repository root.
 
 ```bash
-# 1. Reset both regions to Test D's clean baseline (east active, west passive).
+# 1. Reset both regions to a clean baseline (east active, west passive).
 #    This is destructive: it wipes and rebuilds both regions' Elasticsearch and
 #    Zeebe storage. Only run this against a disposable test environment.
 ./scripts/reset-cluster-d.sh
@@ -107,7 +107,7 @@ All environment-specific values live in two places:
 
 ## Design notes
 
-- **Why Zeebe never restarts**: in this chart's consolidated pod model, the Zeebe broker, Operate, and Tasklist all run in the same StatefulSet. Toggling `orchestration.profiles.operate`/`tasklist` — even alone — forces a Kubernetes pod-template change and rolls every broker. Test D's values files bake these permanently on in both regions instead of toggling them, so promoting or demoting a region only ever touches Connectors, a completely separate Deployment with no effect on the Zeebe StatefulSet. Zeebe cluster membership itself changes only through the raw Zeebe actuator API (force-remove/add brokers), never through a Helm upgrade — see the [Management API docs](https://docs.camunda.io/docs/self-managed/components/orchestration-cluster/zeebe/operations/management-api/).
+- **Why Zeebe never restarts**: in this chart's consolidated pod model, the Zeebe broker, Operate, and Tasklist all run in the same StatefulSet. Toggling `orchestration.profiles.operate`/`tasklist` — even alone — forces a Kubernetes pod-template change and rolls every broker. This suite's values files bake these permanently on in both regions instead of toggling them, so promoting or demoting a region only ever touches Connectors, a completely separate Deployment with no effect on the Zeebe StatefulSet. Zeebe cluster membership itself changes only through the raw Zeebe actuator API (force-remove/add brokers), never through a Helm upgrade — see the [Management API docs](https://docs.camunda.io/docs/self-managed/components/orchestration-cluster/zeebe/operations/management-api/).
 - **Why a full Zeebe PVC wipe on recovery**: restoring true quorum and replication factor after a broker loss requires a genuinely fresh bootstrap, not just a restart — a broker rejoining with stale storage cannot safely resume as a full member of the partition it was force-removed from. This mirrors the recovery approach described in the official [dual-region operational procedure](https://docs.camunda.io/docs/self-managed/deployment/helm/operational-tasks/dual-region-operational-procedure/).
 - **Why the index deletion step before restoring**: Zeebe's own exporter (the [`CamundaExporter`](https://docs.camunda.io/docs/next/self-managed/components/orchestration-cluster/zeebe/exporters/camunda-exporter/), running as a plugin inside each broker process) initializes its Elasticsearch index schema as soon as a broker starts, independent of whether it has rejoined the cluster topology yet. Those empty, schema-only indices conflict with restoring a snapshot over them, so they are deleted immediately beforehand. See also the official [backup and restore](https://docs.camunda.io/docs/self-managed/operational-guides/backup-restore/backup-and-restore/) and [restore a backup](https://docs.camunda.io/docs/self-managed/operational-guides/backup-restore/restore/) guides for the general snapshot/restore mechanics this automates.
 - **Why partition leadership needs an explicit rebalance step**: Zeebe does not automatically move partition leadership back after a broker rejoins the cluster — see [Rebalancing](https://docs.camunda.io/docs/self-managed/components/orchestration-cluster/zeebe/operations/rebalancing/) and [Priority election](https://docs.camunda.io/docs/self-managed/zeebe-deployment/configuration/priority-election/) for the `/actuator/rebalance` endpoint `rebalance-partitions.sh` calls and the priority-election mechanism it depends on.
